@@ -1,0 +1,872 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Word Quicky</title>
+  <style>
+    :root {
+      --card-w: clamp(300px, 78vw, 440px);
+      --card-h: clamp(420px, 58vh, 600px);
+      --radius-card: 44px;
+      --pad-card: 14px;
+      --radius-inset: clamp(10px, calc(var(--radius-card) - var(--pad-card)), var(--radius-card));
+      --radius-field: var(--radius-inset);
+      --white: #ffffff;
+      --text: #111;
+      --spicy-gradient: linear-gradient(180deg, #6E00FA, #5A00E6);
+      --suff-dark: #5A00E6;
+    }
+
+    * { box-sizing: border-box; }
+    html, body {
+      height: 100%;
+      margin: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      color: var(--text);
+      overscroll-behavior: none;
+    }
+
+    #bg {
+      position: fixed;
+      inset: 0;
+      background-image: var(--bg-url);
+      background-position: center;
+      background-size: cover;
+      z-index: -1;
+    }
+
+    .app-header {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      padding: 16px 12px;
+      color: #fff;
+      text-shadow: 0 2px 18px rgba(0,0,0,.45);
+    }
+    .app-header h1 { margin: 0; font-size: clamp(28px, 4vw, 40px); }
+
+    .settings-btn {
+      position: absolute;
+      right: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 48px;
+      height: 48px;
+      border: 0;
+      border-radius: 50%;
+      background: #00000080;
+      box-shadow: 0 8px 24px rgba(0,0,0,.25);
+      display: grid;
+      place-items: center;
+      cursor: pointer;
+      overflow: hidden;
+    }
+    .settings-btn img { width: 28px; height: 28px; object-fit: contain; }
+
+    .app-main {
+      min-height: calc(100vh - 72px);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 22px;
+      padding: 8px 16px 32px;
+    }
+
+    .card-wrap {
+      perspective: 1200px;
+      width: var(--card-w);
+      position: relative;
+    }
+
+    .card-stack {
+      position: relative;
+      width: var(--card-w);
+      height: var(--card-h);
+    }
+
+    .stack-shadow {
+      position: absolute;
+      inset: 10px 8px -10px 8px;
+      border-radius: var(--radius-card);
+      background: rgba(255,255,255,.18);
+      filter: blur(2px);
+      pointer-events: none;
+      transform: scale(.98) translateY(10px);
+      opacity: .65;
+    }
+
+    .card-shell {
+      position: absolute;
+      inset: 0;
+      transform-style: preserve-3d;
+    }
+
+    .card-shell-front {
+      z-index: 2;
+    }
+
+    .card-shell-back {
+      z-index: 1;
+      transform: scale(.92) translateY(16px);
+      opacity: .88;
+      pointer-events: none;
+    }
+
+    .card-shell-front {
+      z-index: 2;
+      transform: scale(1) translateY(0);
+      opacity: 1;
+    }
+
+    .card-shell.pop-in {
+      animation: popFront .26s ease-out;
+    }
+
+    @keyframes popFront {
+      0% {
+        transform: scale(.92) translateY(16px);
+        opacity: .88;
+      }
+      100% {
+        transform: scale(1) translateY(0);
+        opacity: 1;
+      }
+    }
+
+    .card {
+      position: absolute;
+      inset: 0;
+      transform-style: preserve-3d;
+      transition: transform .8s cubic-bezier(.2,.8,.2,1), opacity .22s ease;
+      touch-action: pan-y;
+    }
+    .card.flipped { transform: rotateY(180deg); }
+    .card.swiping { transition: none; }
+    .card.exiting { z-index: 3; }
+
+    .next-card-preview {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      transform: scale(.94) translateY(16px);
+      opacity: .9;
+      transition: transform .22s ease, opacity .22s ease;
+      pointer-events: none;
+    }
+
+    .card-stack.show-next .next-card-preview {
+      transform: scale(1) translateY(0);
+      opacity: 1;
+    }
+
+    .card-face {
+      position: absolute;
+      inset: 0;
+      background: #ffffff;
+      border-radius: var(--radius-card);
+      box-shadow: 0 18px 60px rgba(0,0,0,.25), inset 0 2px 0 rgba(255,255,255,.8);
+      padding: var(--pad-card);
+      backface-visibility: hidden;
+      overflow: hidden;
+      cursor: pointer;
+    }
+
+    .card-front { transform: rotateY(0deg); padding: 0; background: none; }
+    .card-back  {
+      transform: rotateY(180deg);
+      display: grid;
+      grid-template-rows: minmax(0, 2fr) minmax(120px, 1fr);
+      gap: 12px;
+    }
+
+    .card-art.fill {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      border-radius: var(--radius-card);
+      user-select: none;
+      -webkit-user-drag: none;
+    }
+
+    .top-panel {
+      background: var(--spicy-gradient);
+      border-radius: var(--radius-field) var(--radius-field) 0 var(--radius-field);
+      color: #fff;
+      padding: 18px 18px 20px;
+      box-shadow: inset 0 0 0 2px rgba(255,255,255,.25);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+    }
+
+    .statement-text { margin: 0; font-weight: 700; line-height: 1.22; word-break: break-word; color: #fff; font-size: clamp(20px, 5vw, 30px); }
+
+    .bottom-panel {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      border: 3px solid var(--suff-dark);
+      border-radius: 0 var(--radius-field) var(--radius-field) var(--radius-field);
+      background: #fff;
+      box-shadow: inset 0 0 0 2px rgba(255,255,255,.6);
+      padding: 18px;
+      text-align: center;
+    }
+
+    .penalty-text { margin: 0; font-weight: 700; line-height: 1.28; word-break: break-word; color: var(--suff-dark); font-size: clamp(20px, 5vw, 30px); }
+
+    .info-bar {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      width: var(--card-w);
+      color: #fff;
+      font-size: clamp(16px, 2.6vw, 20px);
+      text-shadow: 0 2px 10px rgba(0,0,0,.35);
+      text-align: center;
+    }
+    .info-icon { width: 24px; height: 24px; object-fit: contain; }
+
+    .modal.hidden { display: none; }
+    .modal { position: fixed; inset: 0; z-index: 50; }
+    .modal-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,.45); }
+    .modal-dialog {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      width: min(92vw, 480px);
+      max-height: 88vh;
+      overflow: auto;
+      background: #fff;
+      border-radius: 34px;
+      box-shadow: 0 30px 80px rgba(0,0,0,.35);
+      padding: 16px 16px 20px;
+    }
+    .modal-close {
+      position: absolute;
+      right: 12px;
+      top: 12px;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      border: 0;
+      background: #fff;
+      box-shadow: 0 6px 18px rgba(0,0,0,.25);
+      cursor: pointer;
+      font-size: 18px;
+    }
+    .modal-title { margin: 8px 8px 14px; font-size: 20px; }
+
+    .group {
+      background: #f8f8ff;
+      border-radius: 18px;
+      padding: 14px;
+      margin: 10px 0;
+      box-shadow: inset 0 0 0 2px rgba(0,0,0,.04);
+    }
+    .group-title { font-weight: 800; margin-bottom: 10px; }
+
+    .level-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
+      gap: 12px;
+    }
+
+    .level {
+      width: 100%;
+      max-width: 120px;
+      height: 68px;
+      border-radius: 18px;
+      border: 3px solid transparent;
+      background: #fff;
+      display: grid;
+      place-items: center;
+      cursor: pointer;
+      box-shadow: 0 6px 18px rgba(0,0,0,.08);
+      justify-self: center;
+      font-weight: 700;
+      color: #111;
+      padding: 6px;
+    }
+    .level img { width: 38px; height: 38px; object-fit: contain; margin-bottom: 2px; }
+    .level .level-label { font-size: 11px; line-height: 1; }
+    .level--filled { background: var(--btn-gradient, #6E00FA); color: #fff; }
+    .level--outline { background: #fff; }
+
+    .hidden { display: none !important; }
+
+    @media (max-width: 380px) {
+      .statement-text { margin: 0; font-weight: 700; line-height: 1.22; word-break: break-word; color: #fff; font-size: clamp(20px, 5vw, 30px); }
+      .penalty-text { margin: 0; font-weight: 700; line-height: 1.28; word-break: break-word; color: var(--suff-dark); font-size: clamp(20px, 5vw, 30px); }
+      .level { height: 64px; }
+      .level img { width: 34px; height: 34px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="bg" style="--bg-url: url('background-placeholder.png');"></div>
+
+  <header class="app-header">
+    <h1>Word Quicky</h1>
+    <button id="settings-btn" class="settings-btn" aria-label="Einstellungen">
+      <img src="icon-settings-placeholder.png" alt="" />
+    </button>
+  </header>
+
+  <main class="app-main">
+    <section class="card-wrap">
+      <div class="card-stack">
+        <div class="stack-shadow"></div>
+
+        <div id="next-card-shell" class="card-shell card-shell-back">
+          <div class="card card-next flipped">
+            <div class="card-face card-front">
+              <img src="card-front-placeholder.png" alt="Karte" class="card-art fill" />
+            </div>
+
+            <div class="card-face card-back">
+              <div class="top-panel">
+                <p id="next-statement-text" class="statement-text">Ich habe noch nie …</p>
+              </div>
+
+              <div class="bottom-panel">
+                <p id="next-penalty-text" class="penalty-text">Gewinner verteilt 3 Strafschlücke</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="current-card-shell" class="card-shell card-shell-front">
+          <div id="card" class="card">
+            <div class="card-face card-front">
+              <img src="card-front-placeholder.png" alt="Karte" class="card-art fill" />
+            </div>
+
+            <div class="card-face card-back">
+              <div class="top-panel">
+                <p id="statement-text" class="statement-text">Ich habe noch nie …</p>
+              </div>
+
+              <div class="bottom-panel">
+                <p id="penalty-text" class="penalty-text">Gewinner verteilt 3 Strafschlücke</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="info-bar">
+      <img src="icon-info-placeholder.png" alt="Info" class="info-icon" />
+      <span id="global-info-text">Zum Start tippen</span>
+    </div>
+  </main>
+
+  <div id="settings-modal" class="modal hidden" aria-hidden="true">
+    <div class="modal-backdrop"></div>
+    <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="dlgTitle">
+      <button id="modal-close" class="modal-close" aria-label="Schließen">✕</button>
+
+      <div class="modal-content">
+        <h3 id="dlgTitle" class="modal-title">Einstellungen</h3>
+
+        <div class="group">
+          <div class="group-title">Spicy Intensity</div>
+          <div class="level-row" data-group="spicy">
+            <button class="level level--outline" data-level="1" title="Level 1">
+              <img src="emoji-placeholder-1.png" alt="" />
+              <span class="level-label">Level 1</span>
+            </button>
+            <button class="level level--filled" data-level="2" title="Level 2">
+              <img src="emoji-placeholder-2.png" alt="" />
+              <span class="level-label">Level 2</span>
+            </button>
+            <button class="level level--outline" data-level="3" title="Level 3">
+              <img src="emoji-placeholder-3.png" alt="" />
+              <span class="level-label">Level 3</span>
+            </button>
+            <button class="level level--outline" data-level="4" title="Level 4">
+              <img src="emoji-placeholder-8.png" alt="" />
+              <span class="level-label">Level 4</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="group">
+          <div class="group-title">Suff Intensity</div>
+          <div class="level-row" data-group="suff">
+            <button class="level level--outline" data-level="1" title="Level 1">
+              <img src="emoji-placeholder-4.png" alt="" />
+              <span class="level-label">Level 1</span>
+            </button>
+            <button class="level level--filled" data-level="2" title="Level 2">
+              <img src="emoji-placeholder-5.png" alt="" />
+              <span class="level-label">Level 2</span>
+            </button>
+            <button class="level level--outline" data-level="3" title="Level 3">
+              <img src="emoji-placeholder-6.png" alt="" />
+              <span class="level-label">Level 3</span>
+            </button>
+            <button class="level level--outline" data-level="4" title="Level 4">
+              <img src="emoji-placeholder-8.png" alt="" />
+              <span class="level-label">Level 4</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+<script src="spice-intensity-1.js"></script>
+  <script src="spice-intensity-2.js"></script>
+  <script src="spice-intensity-3.js"></script>
+  <script src="spice-intensity-4.js"></script>
+
+
+<script>
+    const spiceIntensity1 = window.spiceIntensity1 || [
+      'SpiceIntensity1'
+    ];
+
+    const spiceIntensity2 = window.spiceIntensity2 || [
+      'SpiceIntensity2'
+    ];
+
+    const spiceIntensity3 = window.spiceIntensity3 || [
+      'SpiceIntensity3'
+    ];
+
+    const spiceIntensity4 = window.spiceIntensity4 || [
+      'SpiceIntensity4'
+    ];
+
+    const LEVEL_STYLES = {
+      1: { light: '#329BFF', dark: '#238CF0' },
+      2: { light: '#6E00FA', dark: '#5A00E6' },
+      3: { light: '#FA0AFF', dark: '#E100E6' },
+      4: { light: '#FF0A69', dark: '#EB0055' }
+    };
+
+    const config = {
+      spicyLevel: 2,
+      suffLevel: 2
+    };
+
+    const spiceLists = {
+      1: spiceIntensity1,
+      2: spiceIntensity2,
+      3: spiceIntensity3,
+      4: spiceIntensity4
+    };
+
+    const spiceWeights = {
+      1: [{ level: 1, weight: 100 }],
+      2: [{ level: 1, weight: 40 }, { level: 2, weight: 60 }],
+      3: [{ level: 1, weight: 20 }, { level: 2, weight: 30 }, { level: 3, weight: 50 }],
+      4: [{ level: 1, weight: 10 }, { level: 2, weight: 20 }, { level: 3, weight: 30 }, { level: 4, weight: 40 }]
+    };
+
+    const suffSipWeights = {
+      1: [{ value: 0, weight: 100 }],
+      2: [{ value: 1, weight: 55 }, { value: 2, weight: 30 }, { value: 3, weight: 15 }],
+      3: [{ value: 1, weight: 3 }, { value: 2, weight: 7 }, { value: 3, weight: 15 }, { value: 4, weight: 45 }, { value: 5, weight: 20 }, { value: 6, weight: 10 }],
+      4: [{ value: 3, weight: 3 }, { value: 4, weight: 3 }, { value: 5, weight: 6 }, { value: 6, weight: 10 }, { value: 7, weight: 20 }, { value: 8, weight: 35 }, { value: 9, weight: 13 }, { value: 10, weight: 10 }]
+    };
+
+    const suffShotWeights = {
+      1: [{ value: 0, weight: 100 }],
+      2: [{ value: 0, weight: 100 }],
+      3: [{ value: 0, weight: 60 }, { value: 1, weight: 40 }],
+      4: [{ value: 0, weight: 15 }, { value: 1, weight: 25 }, { value: 2, weight: 40 }, { value: 3, weight: 15 }]
+    };
+
+    const currentShell = document.getElementById('current-card-shell');
+    const nextShell = document.getElementById('next-card-shell');
+    const infoText = document.getElementById('global-info-text');
+    const settingsBtn = document.getElementById('settings-btn');
+    const modal = document.getElementById('settings-modal');
+    const modalClose = document.getElementById('modal-close');
+
+    let deck = [];
+    let isRevealed = false;
+    let isAnimating = false;
+    let startX = 0;
+    let currentX = 0;
+    let isDragging = false;
+    let forcedSpiceLevel = config.spicyLevel;
+    let forcedSpiceCardsRemaining = 5;
+    const recentSpiceStatements = [];
+    const repeatLockSize = 40;
+
+    function randomFrom(arr) {
+      return arr[Math.floor(Math.random() * arr.length)];
+    }
+
+    function randomStatementFromList(list) {
+      const safeList = Array.isArray(list) ? list.filter(Boolean) : [];
+      if (safeList.length === 0) return 'Ich habe noch nie …';
+
+      const available = safeList.filter(statement => !recentSpiceStatements.includes(statement));
+      const source = available.length > 0 ? available : safeList;
+      const picked = randomFrom(source) || 'Ich habe noch nie …';
+
+      recentSpiceStatements.push(picked);
+      while (recentSpiceStatements.length > repeatLockSize) {
+        recentSpiceStatements.shift();
+      }
+
+      return picked;
+    }
+
+    function resetForcedSpiceCards(level) {
+      forcedSpiceLevel = Number(level) || 1;
+      forcedSpiceCardsRemaining = 5;
+    }
+
+    function pickSpiceLevelForNextCard() {
+      if (forcedSpiceCardsRemaining > 0) {
+        forcedSpiceCardsRemaining -= 1;
+        return forcedSpiceLevel;
+      }
+      return pickWeighted(spiceWeights[config.spicyLevel]);
+    }
+
+    function pickWeighted(options) {
+      const total = options.reduce((sum, item) => sum + item.weight, 0);
+      let roll = Math.random() * total;
+      for (const item of options) {
+        roll -= item.weight;
+        if (roll <= 0) return item.value ?? item.level;
+      }
+      const last = options[options.length - 1];
+      return last.value ?? last.level;
+    }
+
+    function buildSpiceStatement() {
+      const pickedLevel = pickSpiceLevelForNextCard();
+      const list = spiceLists[pickedLevel] || spiceLists[1];
+      return randomStatementFromList(list);
+    }
+
+    function formatPenaltyText(sips, shots) {
+      const parts = [];
+      if (sips > 0) parts.push(`${sips} Strafschl${sips === 1 ? 'uck' : 'ücke'}`);
+      if (shots > 0) parts.push(`${shots} Shot${shots === 1 ? '' : 's'}`);
+      if (parts.length === 0) return 'Gewinner verteilt 0 Strafschlücke';
+      return 'Gewinner verteilt ' + parts.join(' und ');
+    }
+
+    function buildPenalty() {
+      const sips = pickWeighted(suffSipWeights[config.suffLevel]);
+      const shots = pickWeighted(suffShotWeights[config.suffLevel]);
+      return formatPenaltyText(sips, shots);
+    }
+
+    function buildCardData() {
+      return {
+        statement: buildSpiceStatement(),
+        penalty: buildPenalty()
+      };
+    }
+
+    function shellMarkup(idPrefix) {
+      return `
+        <div class="card" data-card-root="${idPrefix}">
+          <div class="card-face card-front">
+            <img src="card-front-placeholder.png" alt="Karte" class="card-art fill" />
+          </div>
+          <div class="card-face card-back">
+            <div class="top-panel">
+              <p class="statement-text" data-role="statement">Ich habe noch nie …</p>
+            </div>
+            <div class="bottom-panel">
+              <p class="penalty-text" data-role="penalty">Gewinner verteilt 3 Strafschlücke</p>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function ensureShellMarkup() {
+      currentShell.innerHTML = shellMarkup('current');
+      nextShell.innerHTML = shellMarkup('next');
+    }
+
+
+    function fitTextToBox(element, minFontSize = 16) {
+      const computed = window.getComputedStyle(element);
+      const baseFontSize = parseFloat(computed.fontSize) || 24;
+      let fontSize = baseFontSize;
+      element.style.fontSize = fontSize + "px";
+
+      while (element.scrollHeight > element.clientHeight && fontSize > minFontSize) {
+        fontSize -= 1;
+        element.style.fontSize = fontSize + "px";
+      }
+    }
+
+    function renderCardIntoShell(shell, data, revealed, kind) {
+      if (!shell.querySelector('.card')) {
+        shell.innerHTML = shellMarkup(kind);
+      }
+      const card = shell.querySelector('.card');
+      const statement = shell.querySelector('[data-role="statement"]');
+      const penalty = shell.querySelector('[data-role="penalty"]');
+      statement.textContent = data.statement;
+      statement.style.fontSize = "";
+      fitTextToBox(statement);
+      penalty.textContent = data.penalty;
+
+      card.style.transition = '';
+      card.style.transform = '';
+      card.style.opacity = '';
+      card.style.visibility = '';
+      card.classList.remove('swiping');
+
+      if (revealed) card.classList.add('flipped');
+      else card.classList.remove('flipped');
+
+      return card;
+    }
+
+    function setInfo(text) {
+      infoText.textContent = text;
+    }
+
+    function renderDeck() {
+      currentShell.className = 'card-shell card-shell-front';
+      nextShell.className = 'card-shell card-shell-back';
+
+      renderCardIntoShell(currentShell, deck[0], isRevealed, 'current');
+      renderCardIntoShell(nextShell, deck[1], true, 'next');
+
+      setInfo(isRevealed ? 'Zur nächsten Karte wischen' : 'Zum Start tippen');
+      bindFrontCardEvents();
+    }
+
+    function initDeck(resetReveal = true) {
+      deck = [buildCardData(), buildCardData(), buildCardData()];
+      if (resetReveal) isRevealed = false;
+      ensureShellMarkup();
+      renderDeck();
+    }
+
+    function setSpicyStyle(level) {
+      const c = LEVEL_STYLES[level] || LEVEL_STYLES[2];
+      document.documentElement.style.setProperty('--spicy-gradient', `linear-gradient(180deg, ${c.light}, ${c.dark})`);
+    }
+
+    function setSuffStyle(level) {
+      const c = LEVEL_STYLES[level] || LEVEL_STYLES[2];
+      document.documentElement.style.setProperty('--suff-dark', c.dark);
+    }
+
+    function paintLevelButton(btn, filled) {
+      const lvl = Number(btn.dataset.level);
+      const c = LEVEL_STYLES[lvl] || LEVEL_STYLES[2];
+      const gradient = `linear-gradient(180deg, ${c.light}, ${c.dark})`;
+      if (filled) {
+        btn.style.setProperty('--btn-gradient', gradient);
+        btn.style.background = '';
+        btn.style.borderColor = 'transparent';
+        btn.style.color = '#fff';
+      } else {
+        btn.style.removeProperty('--btn-gradient');
+        btn.style.background = '#fff';
+        btn.style.borderColor = c.dark;
+        btn.style.color = c.dark;
+      }
+    }
+
+    function setSelectedLevelInRow(row, level) {
+      row.querySelectorAll('.level').forEach(btn => {
+        const isSelected = Number(btn.dataset.level) === Number(level);
+        btn.classList.toggle('level--filled', isSelected);
+        btn.classList.toggle('level--outline', !isSelected);
+        if (isSelected) btn.setAttribute('level-selected', 'true');
+        else btn.removeAttribute('level-selected');
+        paintLevelButton(btn, isSelected);
+      });
+    }
+
+    function syncModalUIFromConfig() {
+      setSelectedLevelInRow(modal.querySelector('.level-row[data-group="spicy"]'), config.spicyLevel);
+      setSelectedLevelInRow(modal.querySelector('.level-row[data-group="suff"]'), config.suffLevel);
+    }
+
+    function applySettingsFromUI() {
+      const spicyRow = modal.querySelector('.level-row[data-group="spicy"]');
+      const spicySel = spicyRow.querySelector('.level[level-selected="true"]') || spicyRow.querySelector('.level.level--filled');
+      config.spicyLevel = Number(spicySel?.dataset.level || 2);
+
+      const suffRow = modal.querySelector('.level-row[data-group="suff"]');
+      const suffSel = suffRow.querySelector('.level[level-selected="true"]') || suffRow.querySelector('.level.level--filled');
+      config.suffLevel = Number(suffSel?.dataset.level || 2);
+
+      resetForcedSpiceCards(config.spicyLevel);
+      setSpicyStyle(config.spicyLevel);
+      setSuffStyle(config.suffLevel);
+      initDeck(!isRevealed);
+    }
+
+    function closeAndApplyModal() {
+      applySettingsFromUI();
+      modal.classList.add('hidden');
+      modal.setAttribute('aria-hidden', 'true');
+    }
+
+    function revealCard() {
+      if (isRevealed || isAnimating) return;
+      isRevealed = true;
+      const card = currentShell.querySelector('.card');
+      card.classList.add('flipped');
+      setInfo('Zur nächsten Karte wischen');
+      bindFrontCardEvents();
+    }
+
+    function promoteCardsAfterSwipe() {
+      deck.shift();
+      deck.push(buildCardData());
+
+      currentShell.innerHTML = nextShell.innerHTML;
+      nextShell.innerHTML = shellMarkup('next');
+      renderCardIntoShell(nextShell, deck[1], true, 'next');
+
+      currentShell.className = 'card-shell card-shell-front pop-in';
+      nextShell.className = 'card-shell card-shell-back';
+
+      const newFront = currentShell.querySelector('.card');
+      newFront.classList.add('flipped');
+      newFront.style.transform = 'translateX(0px) rotateY(180deg) rotate(0deg)';
+      newFront.style.opacity = '1';
+      newFront.style.visibility = '';
+
+      setTimeout(() => {
+        currentShell.classList.remove('pop-in');
+        isAnimating = false;
+        bindFrontCardEvents();
+      }, 260);
+    }
+
+    function swipeOut(direction) {
+      const card = currentShell.querySelector('.card');
+      const exitX = direction === 'left' ? -Math.abs(window.innerWidth * 1.25) : Math.abs(window.innerWidth * 1.25);
+      const rotation = direction === 'left' ? -12 : 12;
+
+      isAnimating = true;
+      card.classList.remove('swiping');
+      card.style.transition = 'transform .22s ease-out, opacity .22s ease-out';
+      card.style.transform = `translateX(${exitX}px) rotateY(180deg) rotate(${rotation}deg)`;
+      card.style.opacity = '0';
+
+      setTimeout(() => {
+        card.style.visibility = 'hidden';
+        promoteCardsAfterSwipe();
+      }, 220);
+    }
+
+    function onSwipeStart(clientX) {
+      if (!isRevealed || isAnimating) return;
+      isDragging = true;
+      startX = clientX;
+      currentX = clientX;
+      const card = currentShell.querySelector('.card');
+      card.classList.add('swiping');
+    }
+
+    function onSwipeMove(clientX) {
+      if (!isDragging || !isRevealed || isAnimating) return;
+      currentX = clientX;
+      const deltaX = currentX - startX;
+      const card = currentShell.querySelector('.card');
+      card.style.transform = `translateX(${deltaX}px) rotateY(180deg) rotate(${deltaX / 18}deg)`;
+    }
+
+    function onSwipeEnd() {
+      if (!isDragging || !isRevealed || isAnimating) return;
+      isDragging = false;
+      const deltaX = currentX - startX;
+      const threshold = 90;
+      const card = currentShell.querySelector('.card');
+
+      if (Math.abs(deltaX) > threshold) {
+        swipeOut(deltaX < 0 ? 'left' : 'right');
+        return;
+      }
+
+      card.classList.remove('swiping');
+      card.style.transition = 'transform .18s ease';
+      card.style.transform = 'translateX(0px) rotateY(180deg) rotate(0deg)';
+      setTimeout(() => {
+        card.style.transition = '';
+      }, 180);
+    }
+
+    function bindFrontCardEvents() {
+      const card = currentShell.querySelector('.card');
+      const cardFront = currentShell.querySelector('.card-front');
+
+      const fresh = card.cloneNode(true);
+      card.replaceWith(fresh);
+
+      const activeCard = currentShell.querySelector('.card');
+      const activeFront = currentShell.querySelector('.card-front');
+
+      activeFront.addEventListener('click', revealCard);
+
+      activeCard.addEventListener('touchstart', e => {
+        if (e.touches.length !== 1) return;
+        onSwipeStart(e.touches[0].clientX);
+      }, { passive: true });
+
+      activeCard.addEventListener('touchmove', e => {
+        if (e.touches.length !== 1) return;
+        onSwipeMove(e.touches[0].clientX);
+      }, { passive: true });
+
+      activeCard.addEventListener('touchend', onSwipeEnd);
+      activeCard.addEventListener('mousedown', e => onSwipeStart(e.clientX));
+    }
+
+    settingsBtn.addEventListener('click', () => {
+      syncModalUIFromConfig();
+      modal.classList.remove('hidden');
+      modal.setAttribute('aria-hidden', 'false');
+    });
+
+    modalClose.addEventListener('click', closeAndApplyModal);
+    modal.querySelector('.modal-backdrop').addEventListener('click', closeAndApplyModal);
+
+    document.querySelectorAll('.level-row .level').forEach(btn => {
+      if (btn.closest('.level-row')?.dataset.group === 'spicy' && btn.dataset.level === '4') {
+        const img = btn.querySelector('img');
+        if (img) img.src = 'emoji-placeholder-8.png';
+      }
+      paintLevelButton(btn, btn.classList.contains('level--filled'));
+      btn.addEventListener('click', e => {
+        const row = e.currentTarget.closest('.level-row');
+        const picked = Number(e.currentTarget.dataset.level);
+        setSelectedLevelInRow(row, picked);
+      });
+    });
+
+    window.addEventListener('mousemove', e => onSwipeMove(e.clientX));
+    window.addEventListener('mouseup', onSwipeEnd);
+    window.addEventListener('mouseleave', onSwipeEnd);
+
+    setSpicyStyle(config.spicyLevel);
+    setSuffStyle(config.suffLevel);
+    initDeck(true);
+  </script>
+
+
+</body>
+</html>
